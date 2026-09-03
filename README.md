@@ -253,6 +253,14 @@ External verification was performed by accessing the EC2 public IPv4 address fro
 
 ---
 
+## 📸 Deployment Result
+
+The custom CloudOps Lab page is successfully served by Nginx from the AWS EC2 instance.
+
+![CloudOps Lab running on AWS EC2](cloudops-lab-web.png)
+
+---
+
 ## 📁 File Transfer with SCP
 
 The deployed website source was transferred securely from the remote EC2 instance to the local Windows machine using SCP.
