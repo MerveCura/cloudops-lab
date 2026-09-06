@@ -806,6 +806,508 @@ This reduces unnecessary access and limits the potential impact of credential mi
 
 **Day 3 — Custom AWS Network Architecture & Service Integration**
 
+# 🌐 Day 3 — Custom AWS VPC & Multi-AZ Network Architecture
+
+## 🎯 Objective
+
+Build a custom AWS network from scratch instead of relying on the default VPC.
+
+The environment was designed with multiple Availability Zones, public/private subnets, controlled routing, secure EC2 access, NAT-based outbound connectivity, and a public Nginx web server.
+
+---
+
+## 🏗️ Architecture
+
+```text
+                                  Internet
+                                     │
+                                     ▼
+                             Internet Gateway
+                                     │
+                                     ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                         cloudops-vpc                             │
+│                         10.0.0.0/16                              │
+│                                                                  │
+│          eu-central-1a                     eu-central-1b          │
+│                                                                  │
+│   ┌─────────────────────┐           ┌─────────────────────┐     │
+│   │ Public Subnet 1     │           │ Public Subnet 2     │     │
+│   │ 10.0.1.0/24         │           │ 10.0.3.0/24         │     │
+│   │                     │           │                     │     │
+│   │ Public EC2          │           │                     │     │
+│   │ Ubuntu + Nginx      │           │                     │     │
+│   │                     │           │                     │     │
+│   │ NAT Gateway         │           │                     │     │
+│   └──────────┬──────────┘           └─────────────────────┘     │
+│              │                                                   │
+│   ┌──────────▼──────────┐           ┌─────────────────────┐     │
+│   │ Private Subnet 1    │           │ Private Subnet 2    │     │
+│   │ 10.0.2.0/24         │           │ 10.0.4.0/24         │     │
+│   │                     │           │                     │     │
+│   │ Private EC2         │           │                     │     │
+│   │ No Public IPv4      │           │                     │     │
+│   └─────────────────────┘           └─────────────────────┘     │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Environment Summary
+
+```text
+1 Custom VPC
+2 Availability Zones
+4 Subnets
+├── 2 Public Subnets
+└── 2 Private Subnets
+
+1 Internet Gateway
+1 NAT Gateway
+1 Elastic IP
+2 Route Tables
+1 Public EC2
+1 Private EC2
+2 Dedicated Security Groups
+```
+
+---
+
+## 🛠️ AWS Services & Technologies
+
+- AWS VPC
+- EC2
+- Public & Private Subnets
+- Availability Zones
+- Route Tables
+- Internet Gateway
+- NAT Gateway
+- Elastic IP
+- Security Groups
+- Ubuntu Linux
+- SSH / ProxyJump
+- Nginx
+- HTTP
+- Linux CLI
+- GitHub Issues & Projects
+
+---
+
+## 🌍 Network Design
+
+The custom VPC was created with:
+
+```text
+cloudops-vpc
+10.0.0.0/16
+```
+
+Four `/24` subnets were distributed across two Availability Zones:
+
+| Subnet | CIDR | AZ | Type |
+|---|---|---|---|
+| `cloudops-public-subnet-1` | `10.0.1.0/24` | eu-central-1a | Public |
+| `cloudops-private-subnet-1` | `10.0.2.0/24` | eu-central-1a | Private |
+| `cloudops-public-subnet-2` | `10.0.3.0/24` | eu-central-1b | Public |
+| `cloudops-private-subnet-2` | `10.0.4.0/24` | eu-central-1b | Private |
+
+This created a Multi-AZ foundation that can later be extended with load balancing, Auto Scaling, databases, and container workloads.
+
+---
+
+## 🛣️ Routing
+
+### Public Route Table
+
+```text
+cloudops-public-rt
+
+10.0.0.0/16 → local
+0.0.0.0/0   → Internet Gateway
+```
+
+Associated with both public subnets.
+
+### Private Route Table
+
+```text
+cloudops-private-rt
+
+10.0.0.0/16 → local
+0.0.0.0/0   → NAT Gateway
+```
+
+Associated with both private subnets.
+
+The resulting traffic paths are:
+
+```text
+Public:
+EC2 → Public Route Table → Internet Gateway → Internet
+
+Private:
+EC2 → Private Route Table → NAT Gateway → Internet Gateway → Internet
+```
+
+---
+
+## 🔐 Security Design
+
+### Public EC2 Security Group
+
+```text
+cloudops-web-sg
+```
+
+Inbound:
+
+```text
+SSH   TCP/22 → Administrator public IP
+HTTP  TCP/80 → 0.0.0.0/0
+```
+
+SSH administration is restricted while HTTP remains publicly accessible.
+
+### Private EC2 Security Group
+
+```text
+cloudops-private-sg
+```
+
+Inbound SSH is allowed from:
+
+```text
+cloudops-web-sg
+```
+
+instead of exposing port 22 to the internet.
+
+```text
+Local PC
+   │
+   ▼
+Public EC2
+cloudops-web-sg
+   │
+   │ SSH
+   ▼
+Private EC2
+cloudops-private-sg
+```
+
+This demonstrated Security Group referencing between application tiers.
+
+---
+
+## 🖥️ Public EC2 & Nginx
+
+A public Ubuntu EC2 instance was launched in:
+
+```text
+cloudops-public-subnet-1
+```
+
+Nginx was installed and verified:
+
+```bash
+sudo apt update
+sudo apt install nginx -y
+sudo systemctl status nginx
+```
+
+The service returned:
+
+```text
+Active: active (running)
+```
+
+HTTP connectivity through the EC2 public IPv4 address was successfully verified.
+
+---
+
+## 🎨 Custom Web Deployment
+
+A custom CloudOps page was created:
+
+```text
+/var/www/html/cloudops.html
+```
+
+The Nginx index configuration was updated:
+
+```nginx
+index cloudops.html index.html index.htm index.nginx-debian.html;
+```
+
+Before applying the change, the configuration was validated:
+
+```bash
+sudo nginx -t
+```
+
+Then Nginx was reloaded without stopping the service:
+
+```bash
+sudo systemctl reload nginx
+```
+
+The custom page was successfully served from the public EC2 instance.
+
+---
+
+## 📸 Deployment Result
+
+The custom CloudOps page is running on the EC2 instance inside the custom VPC.
+
+![Day 3 CloudOps Nginx deployment](day3-cloudops-web.png)
+
+![Day 3 AWS network architecture](day3-vpc-architecture.png)
+
+---
+
+## 🔒 Private EC2
+
+A second Ubuntu EC2 instance was deployed into:
+
+```text
+cloudops-private-subnet-1
+```
+
+with:
+
+```text
+Public IPv4: Disabled
+Private IPv4: 10.0.2.225
+```
+
+The instance cannot be reached directly from the public internet.
+
+Administrative access is performed through the public EC2 instance.
+
+---
+
+## 🪜 SSH Jump Host
+
+The public EC2 was used as a jump/bastion host to access the private instance.
+
+Conceptually:
+
+```text
+Local Windows PC
+       │
+       │ SSH
+       ▼
+Public EC2
+       │
+       │ SSH
+       ▼
+Private EC2
+```
+
+SSH ProxyJump was tested, and a ProxyCommand-based connection was used successfully from Windows:
+
+```powershell
+ssh -i "cloudops-web-key.pem" -o ProxyCommand="ssh -i cloudops-web-key.pem -W %h:%p ubuntu@<PUBLIC_EC2_IP>" ubuntu@10.0.2.225
+```
+
+This allowed access to the private EC2 without copying the private key onto the public server.
+
+---
+
+## 🔄 NAT Gateway Validation
+
+A public Zonal NAT Gateway was deployed into:
+
+```text
+cloudops-public-subnet-1
+```
+
+with an Elastic IP.
+
+Outbound HTTPS connectivity from the private EC2 was tested:
+
+```bash
+curl -I https://aws.amazon.com
+```
+
+Result:
+
+```text
+HTTP/2 200
+```
+
+The externally visible IP was also checked:
+
+```bash
+curl https://checkip.amazonaws.com
+```
+
+The returned address matched the NAT Gateway Elastic IP.
+
+This confirmed the full path:
+
+```text
+Private EC2
+   │
+   ▼
+Private Route Table
+   │
+   ▼
+NAT Gateway
+   │
+   ▼
+Internet Gateway
+   │
+   ▼
+Internet
+```
+
+The private instance therefore has outbound internet access without requiring its own public IPv4 address.
+
+---
+
+## 🧪 Validation Summary
+
+| Validation | Result |
+|---|---|
+| Custom VPC | ✅ |
+| 2 Availability Zones | ✅ |
+| 4 Subnets | ✅ |
+| Public Route Table | ✅ |
+| Private Route Table | ✅ |
+| Internet Gateway | ✅ |
+| NAT Gateway | ✅ |
+| Elastic IP | ✅ |
+| Public EC2 | ✅ |
+| Private EC2 without public IP | ✅ |
+| Restricted SSH | ✅ |
+| Public HTTP access | ✅ |
+| Security Group referencing | ✅ |
+| Nginx deployment | ✅ |
+| Custom web page | ✅ |
+| SSH jump-host access | ✅ |
+| Private EC2 outbound internet | ✅ |
+| NAT public IP validation | ✅ |
+
+---
+
+## 🛠️ Troubleshooting Highlights
+
+Two practical issues were also investigated during the lab:
+
+### AWS Request Expiration
+
+VPC creation initially failed with:
+
+```text
+Request has expired
+```
+
+The root cause was an incorrect local system clock.
+
+After synchronizing the Windows clock and renewing the AWS Console session, VPC creation succeeded.
+
+### SSH Jump Host Authentication
+
+The initial short-form `ssh -J` connection did not use the SSH key as expected in the local Windows OpenSSH environment.
+
+The connection was completed successfully by explicitly defining the jump-host key using `ProxyCommand`.
+
+These issues provided additional practice in troubleshooting cloud API and SSH authentication problems.
+
+---
+
+## 🧠 Key Learnings
+
+- Building a custom VPC instead of relying on the default network
+- CIDR planning and subnet allocation
+- Designing a 2-AZ / 4-subnet architecture
+- Public vs private subnet routing
+- Internet Gateway configuration
+- NAT Gateway and Elastic IP usage
+- Public/private route table separation
+- Security Group design and SG-to-SG referencing
+- Deploying public and private EC2 instances
+- Preventing direct public access to private workloads
+- Using a public server as an SSH jump host
+- SSH ProxyJump / ProxyCommand
+- Installing and configuring Nginx
+- Validating Nginx configuration before reload
+- Testing NAT connectivity with `curl`
+- Troubleshooting AWS request signing and SSH authentication
+- Considering cloud resource costs during lab design
+
+---
+
+## 📌 Day 3 Status
+
+### Day 3 — Completed ✅
+
+- [x] Custom VPC created
+- [x] VPC CIDR planned
+- [x] Architecture distributed across 2 AZs
+- [x] 2 public subnets created
+- [x] 2 private subnets created
+- [x] Internet Gateway created and attached
+- [x] Public route table configured
+- [x] Private route table configured
+- [x] Public subnet associations configured
+- [x] Private subnet associations configured
+- [x] NAT Gateway deployed
+- [x] Elastic IP allocated
+- [x] Public EC2 deployed
+- [x] Private EC2 deployed without public IPv4
+- [x] Public Security Group configured
+- [x] Private Security Group configured
+- [x] SG-to-SG SSH access configured
+- [x] Public SSH connectivity validated
+- [x] Private EC2 jump-host connectivity validated
+- [x] Nginx installed and running
+- [x] Custom CloudOps page deployed
+- [x] Nginx configuration validated
+- [x] Public HTTP connectivity validated
+- [x] Private EC2 outbound internet validated
+- [x] NAT Gateway source IP validated
+- [x] Architecture documented
+
+---
+
+## 🎯 Final Result
+
+Day 3 progressed from understanding AWS networking concepts to manually building and validating a multi-tier, Multi-AZ environment.
+
+```text
+                         Internet
+                            │
+                    Internet Gateway
+                            │
+                      cloudops-vpc
+                       10.0.0.0/16
+                            │
+              ┌─────────────┴─────────────┐
+              │                           │
+         Public Tier                 Private Tier
+              │                           │
+        Public EC2                   Private EC2
+        Nginx / HTTP                No Public IPv4
+              │                           │
+              │ SSH Jump Host             │
+              └───────────────────────────►│
+                                          │
+                                     NAT Gateway
+                                          │
+                                          ▼
+                                       Internet
+```
+
+The lab demonstrated practical AWS network segmentation, routing, security, Linux administration, secure server access, Nginx deployment, NAT connectivity, and cloud troubleshooting.
+
+---
+
+### Next
+
+**Day 4 — AWS S3, IAM Role & AWS CLI Service Integration**
+
+
 ## 🔭 Roadmap
 
 Future labs will expand this project with:
