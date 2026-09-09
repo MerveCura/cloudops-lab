@@ -1307,6 +1307,227 @@ The lab demonstrated practical AWS network segmentation, routing, security, Linu
 
 **Day 4 — AWS S3, IAM Role & AWS CLI Service Integration**
 
+## Day 4 – Amazon S3, IAM Roles & EC2 Integration
+
+### Goal
+
+The goal of Day 4 was to configure Amazon S3 and securely integrate it with an EC2 instance using an IAM Role, without storing long-term AWS access keys on the server.
+
+### What I Did
+
+- Created a private Amazon S3 bucket: `merve-cloudops-lab-s3`
+- Kept **Block Public Access** enabled
+- Used **SSE-S3 server-side encryption**
+- Enabled **S3 Versioning**
+- Uploaded multiple versions of the same object and verified version history
+- Created a **Lifecycle rule** to permanently delete noncurrent object versions after 30 days
+- Created an EC2 IAM Role: `cloudops-ec2-s3-role`
+- Created a custom S3 policy restricted to the lab bucket
+- Attached the IAM Role to the existing `cloudops-dev-01` EC2 instance
+- Connected to the EC2 instance using SSH
+- Installed and used AWS CLI on the EC2 instance
+- Verified the EC2 identity using AWS STS
+- Tested S3 listing, upload, download, delete and sync operations from EC2
+- Verified S3 Delete Markers and previous object versions
+- Troubleshot IAM `AccessDenied` errors and updated permissions where required
+
+### Architecture
+
+```text
+                     AWS Cloud
+                         |
+              +----------+----------+
+              |                     |
+              |   EC2 Instance      |
+              | cloudops-dev-01     |
+              |                     |
+              +----------+----------+
+                         |
+                         | assumes
+                         v
+              +---------------------+
+              |      IAM Role       |
+              | cloudops-ec2-s3-role|
+              +----------+----------+
+                         |
+                         | Custom S3 Policy
+                         | Least Privilege
+                         v
+              +---------------------+
+              |      Amazon S3      |
+              |merve-cloudops-lab-s3|
+              +---------------------+
+
+              No Access Key stored on EC2
+```
+
+### IAM Role Verification
+
+I verified which AWS identity the EC2 instance was using with:
+
+```bash
+aws sts get-caller-identity
+```
+
+The returned ARN contained:
+
+```text
+assumed-role/cloudops-ec2-s3-role/...
+```
+
+This confirmed that the EC2 instance was successfully using the IAM Role and receiving temporary AWS credentials instead of using manually configured Access Keys.
+
+### S3 Access and Least Privilege
+
+Running:
+
+```bash
+aws s3 ls
+```
+
+returned `AccessDenied`.
+
+This was expected because the EC2 IAM Role was intentionally not allowed to list every S3 bucket in the AWS account.
+
+The role was restricted to the specific lab bucket.
+
+Accessing the authorized bucket directly worked successfully:
+
+```bash
+aws s3 ls s3://merve-cloudops-lab-s3
+```
+
+This demonstrated the **Principle of Least Privilege**: the EC2 instance received only the permissions required for the lab.
+
+### AWS CLI Tests
+
+A test file was created directly on the EC2 instance:
+
+```bash
+echo "Hello from my EC2 instance" > ec2-test.txt
+```
+
+The file was uploaded from EC2 to S3:
+
+```bash
+aws s3 cp ec2-test.txt s3://merve-cloudops-lab-s3/
+```
+
+The local copy was removed and downloaded again from S3:
+
+```bash
+rm ec2-test.txt
+
+aws s3 cp s3://merve-cloudops-lab-s3/ec2-test.txt ec2-test.txt
+
+cat ec2-test.txt
+```
+
+The object was then deleted from S3:
+
+```bash
+aws s3 rm s3://merve-cloudops-lab-s3/ec2-test.txt
+```
+
+### S3 Sync Test
+
+A local test directory containing multiple files was created on EC2:
+
+```bash
+mkdir s3-sync-test
+
+echo "Day 4 - S3 Sync Test" > s3-sync-test/file1.txt
+echo "EC2 to S3 integration works" > s3-sync-test/file2.txt
+```
+
+The directory was synchronized with S3:
+
+```bash
+aws s3 sync s3-sync-test/ s3://merve-cloudops-lab-s3/sync-test/
+```
+
+The synchronized objects were successfully verified from the S3 Console.
+
+### Versioning and Lifecycle Management
+
+S3 Versioning was enabled and tested by uploading multiple versions of the same object.
+
+After deleting `ec2-test.txt`, **Show versions** was enabled in the S3 Console. A **Delete Marker** was created while the previous object version remained available.
+
+This demonstrated that deleting an object from a version-enabled bucket does not immediately permanently remove its previous versions.
+
+A Lifecycle rule was also configured:
+
+```text
+Object becomes noncurrent
+          |
+          v
+       30 days
+          |
+          v
+Permanently delete old version
+```
+
+This prevents unnecessary old object versions from accumulating indefinitely.
+
+### IAM Troubleshooting
+
+During the lab, several `AccessDenied` errors were encountered because the `cloudops-admin` IAM user initially did not have all permissions required to create and manage S3 and EC2 IAM resources.
+
+Instead of granting full IAM administrative access, the permissions were reviewed and expanded only where required.
+
+A custom IAM management policy was used to allow the required role and instance-profile operations.
+
+This provided practical experience with:
+
+- IAM permission troubleshooting
+- Identity-based policies
+- IAM Roles
+- Instance Profiles
+- `iam:PassRole`
+- AWS STS
+- Least-privilege access
+
+### What I Learned
+
+- Amazon S3 stores data as objects inside buckets.
+- S3 buckets should remain private unless public access is explicitly required.
+- SSE-S3 provides server-side encryption using S3-managed encryption keys.
+- S3 Versioning protects against accidental overwrites and deletions.
+- Delete Markers are used when objects are deleted from version-enabled buckets.
+- Lifecycle rules can automatically manage and remove old object versions.
+- IAM Roles allow EC2 instances to securely access AWS services without storing long-term credentials.
+- AWS STS can be used to verify the identity currently being used by an EC2 instance.
+- IAM policies can restrict an EC2 instance to a specific S3 bucket.
+- `aws s3 cp` is useful for transferring individual objects.
+- `aws s3 sync` synchronizes files between a local directory and an S3 location.
+- `AccessDenied` errors can be used to identify missing IAM permissions and validate least-privilege configurations.
+
+### Validation
+
+```text
+S3 Bucket Creation              -> SUCCESS
+S3 Block Public Access          -> ENABLED
+SSE-S3 Encryption               -> ENABLED
+S3 Versioning                   -> ENABLED
+Multiple Object Versions        -> VERIFIED
+Lifecycle Rule                  -> CONFIGURED
+EC2 IAM Role                    -> ATTACHED
+AWS STS Role Verification       -> SUCCESS
+EC2 -> S3 List                  -> SUCCESS
+EC2 -> S3 Upload                -> SUCCESS
+S3 -> EC2 Download              -> SUCCESS
+S3 Object Delete                -> SUCCESS
+S3 Delete Marker                -> VERIFIED
+EC2 -> S3 Sync                  -> SUCCESS
+Long-term Access Keys on EC2    -> NOT USED
+```
+
+### Cleanup
+
+After completing the tests, the EC2 instance was stopped to avoid unnecessary compute costs.
+
+Temporary S3 objects and the lab bucket are cleaned up after the required screenshots and documentation are completed.
 
 ## 🔭 Roadmap
 
