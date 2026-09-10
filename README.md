@@ -1529,6 +1529,614 @@ After completing the tests, the EC2 instance was stopped to avoid unnecessary co
 
 Temporary S3 objects and the lab bucket are cleaned up after the required screenshots and documentation are completed.
 
+## Day 5 – Docker Fundamentals & Containerized Web Server
+
+### Goal
+
+The goal of Day 5 was to learn the fundamentals of Docker and deploy a containerized web server on an AWS EC2 instance.
+
+Instead of installing and running the web application directly on the host operating system, Docker was used to package and run the application inside an isolated container.
+
+---
+
+### What I Did
+
+- Started the existing AWS EC2 instance `cloudops-dev-01`.
+- Connected to the EC2 instance using SSH.
+- Installed Docker on Ubuntu.
+- Verified that the Docker service was running.
+- Tested Docker using the `hello-world` container.
+- Learned the difference between Docker images and containers.
+- Pulled and ran the official Nginx Docker image.
+- Published the Nginx container using port mapping.
+- Tested the container locally using `curl`.
+- Added a Security Group rule for controlled external access.
+- Verified the Nginx container from a web browser.
+- Created a custom `index.html` page.
+- Created a custom Dockerfile based on the Nginx image.
+- Built a custom Docker image named `cloudops-web:v1`.
+- Deployed a container from the custom image.
+- Published the custom application using port `8081`.
+- Verified the custom web page from a browser.
+- Inspected Nginx container logs.
+- Executed commands inside a running container.
+- Verified that the custom HTML file existed inside the container.
+- Practiced the Docker container lifecycle using stop, start, and remove operations.
+- Cleaned up the lab containers after testing.
+
+---
+
+### Architecture
+
+```text
+User Browser
+     |
+     | HTTP :8081
+     v
+AWS Security Group
+     |
+     v
+AWS EC2 - cloudops-dev-01
+     |
+     | Host Port 8081
+     v
+Docker
+     |
+     | Port Mapping
+     | 8081 -> 80
+     v
+cloudops-web-container
+     |
+     v
+Nginx :80
+     |
+     v
+Custom index.html
+```
+
+---
+
+### Docker Installation
+
+Docker was installed on the Ubuntu EC2 instance.
+
+```bash
+sudo apt update
+sudo apt install docker.io -y
+```
+
+The installation was verified with:
+
+```bash
+docker --version
+```
+
+Docker version used during the lab:
+
+```text
+Docker version 29.1.3
+```
+
+The Docker service status was also verified:
+
+```bash
+sudo systemctl status docker
+```
+
+The service was confirmed as:
+
+```text
+active (running)
+```
+
+---
+
+### First Docker Container
+
+Docker functionality was tested using the official `hello-world` image:
+
+```bash
+sudo docker run hello-world
+```
+
+The container successfully returned:
+
+```text
+Hello from Docker!
+```
+
+Running containers were inspected using:
+
+```bash
+sudo docker ps
+```
+
+All containers, including stopped containers, were inspected using:
+
+```bash
+sudo docker ps -a
+```
+
+This demonstrated that a container can finish its task and move into an `Exited` state.
+
+---
+
+### Running Nginx in Docker
+
+The official Nginx image was deployed as a container:
+
+```bash
+sudo docker run -d --name cloudops-nginx -p 8080:80 nginx
+```
+
+Port mapping:
+
+```text
+EC2 Port 8080
+      |
+      v
+Container Port 80
+      |
+      v
+Nginx
+```
+
+The running container was verified using:
+
+```bash
+sudo docker ps
+```
+
+Local connectivity was tested from the EC2 instance:
+
+```bash
+curl http://localhost:8080
+```
+
+The default Nginx page was returned successfully.
+
+A Security Group inbound rule was then configured for TCP port `8080` using `My IP` as the source.
+
+The Nginx page was successfully accessed from an external web browser.
+
+---
+
+### Custom Web Application
+
+A new project directory was created:
+
+```bash
+mkdir docker-web
+cd docker-web
+```
+
+A custom `index.html` page was created:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CloudOps Docker Lab</title>
+</head>
+<body>
+    <h1>Hello from Docker!</h1>
+    <p>This page is running inside a Docker container on AWS EC2.</p>
+</body>
+</html>
+```
+
+---
+
+### Dockerfile
+
+A custom Dockerfile was created:
+
+```dockerfile
+FROM nginx:latest
+
+COPY index.html /usr/share/nginx/html/index.html
+```
+
+The Dockerfile uses the official Nginx image as the base image and replaces the default web page with the custom `index.html`.
+
+Build process:
+
+```text
+Dockerfile
+    +
+index.html
+    |
+    v
+docker build
+    |
+    v
+cloudops-web:v1
+```
+
+---
+
+### Building a Custom Docker Image
+
+The custom image was built using:
+
+```bash
+sudo docker build -t cloudops-web:v1 .
+```
+
+The build completed successfully and created:
+
+```text
+cloudops-web:v1
+```
+
+Available Docker images were inspected using:
+
+```bash
+sudo docker images
+```
+
+The lab environment contained images including:
+
+```text
+cloudops-web:v1
+hello-world:latest
+nginx:latest
+```
+
+---
+
+### Deploying the Custom Image
+
+A new container was created from the custom image:
+
+```bash
+sudo docker run -d \
+  --name cloudops-web-container \
+  -p 8081:80 \
+  cloudops-web:v1
+```
+
+This created the following mapping:
+
+```text
+EC2 :8081
+    |
+    v
+Docker Container :80
+    |
+    v
+Nginx
+    |
+    v
+Custom Web Page
+```
+
+Local connectivity was verified using:
+
+```bash
+curl http://localhost:8081
+```
+
+The custom HTML content was returned successfully.
+
+A Security Group inbound rule was configured for TCP port `8081` with `My IP` as the source.
+
+The custom Docker application was then successfully accessed through the EC2 public IP:
+
+```text
+http://<EC2-PUBLIC-IP>:8081
+```
+
+The browser displayed:
+
+```text
+Hello from Docker!
+
+This page is running inside a Docker container on AWS EC2.
+```
+
+---
+
+### Container Logs
+
+Container logs were inspected using:
+
+```bash
+sudo docker logs cloudops-web-container
+```
+
+The Nginx access logs showed successful HTTP requests:
+
+```text
+GET / HTTP/1.1 200
+```
+
+The HTTP status code `200` confirmed that the web page was successfully served.
+
+The browser also automatically requested:
+
+```text
+GET /favicon.ico
+```
+
+Since no favicon was included in the application, Nginx returned:
+
+```text
+404 Not Found
+```
+
+This provided a simple example of using container logs to investigate HTTP requests and application behavior.
+
+---
+
+### Executing Commands Inside a Container
+
+An interactive shell was opened inside the running container:
+
+```bash
+sudo docker exec -it cloudops-web-container /bin/bash
+```
+
+The custom HTML file inside the container was inspected using:
+
+```bash
+cat /usr/share/nginx/html/index.html
+```
+
+This confirmed that the Dockerfile successfully copied the local `index.html` into the Nginx container filesystem.
+
+The container shell was exited using:
+
+```bash
+exit
+```
+
+---
+
+### Docker Container Lifecycle
+
+The custom container was stopped:
+
+```bash
+sudo docker stop cloudops-web-container
+```
+
+Running containers were checked:
+
+```bash
+sudo docker ps
+```
+
+Stopped containers were checked:
+
+```bash
+sudo docker ps -a
+```
+
+The same container was restarted using:
+
+```bash
+sudo docker start cloudops-web-container
+```
+
+This demonstrated the difference between the main lifecycle commands:
+
+```text
+docker run
+   |
+   | Creates + starts a new container
+   v
+Running Container
+   |
+   | docker stop
+   v
+Stopped Container
+   |
+   | docker start
+   v
+Running Container
+```
+
+A stopped container can be removed using:
+
+```bash
+sudo docker rm cloudops-web-container
+```
+
+Removing a container does not automatically remove the Docker image from which it was created.
+
+---
+
+### Docker Image vs Container
+
+One of the key concepts learned during this lab was the difference between an image and a container.
+
+```text
+Dockerfile
+    |
+    | docker build
+    v
+Docker Image
+cloudops-web:v1
+    |
+    | docker run
+    v
+Docker Container
+cloudops-web-container
+```
+
+A Docker image is a reusable template containing the application and its required files.
+
+A Docker container is a running or stopped instance created from that image.
+
+Multiple containers can be created from the same image.
+
+---
+
+### Basic Troubleshooting
+
+During the lab, running:
+
+```bash
+docker ps
+```
+
+without `sudo` returned a permission error when attempting to access the Docker socket.
+
+Using:
+
+```bash
+sudo docker ps
+```
+
+successfully communicated with the Docker daemon.
+
+This demonstrated that Docker daemon access is controlled through Linux permissions.
+
+Application connectivity was also validated layer by layer:
+
+```text
+Browser
+   |
+   v
+AWS Security Group
+   |
+   v
+EC2 Host Port
+   |
+   v
+Docker Port Mapping
+   |
+   v
+Container
+   |
+   v
+Nginx
+   |
+   v
+Custom Web Page
+```
+
+Instead of restarting services randomly, each layer was tested individually using Docker commands, `curl`, browser access, and container logs.
+
+---
+
+### Security
+
+For the lab environment:
+
+- SSH access remained restricted.
+- Docker application ports were opened using `My IP` instead of exposing them to the entire internet.
+- No AWS credentials were stored inside the Docker image.
+- No AWS access keys or secret keys were added to the container.
+- No private SSH keys were stored in the repository.
+
+---
+
+### Cleanup
+
+After completing the tests, the lab containers were stopped and removed.
+
+The final container state was verified using:
+
+```bash
+sudo docker ps -a
+```
+
+No running or stopped containers remained.
+
+The custom Docker image was kept locally for documentation and future Docker exercises.
+
+---
+
+### What I Learned
+
+During Day 5, I learned:
+
+- What Docker is and why containers are useful.
+- The difference between a Docker image and a container.
+- How Docker pulls images from a container registry.
+- How to run containers in detached mode.
+- How Docker port mapping works.
+- How AWS Security Groups interact with containerized applications.
+- How to create a Dockerfile.
+- How to build a custom Docker image.
+- How to deploy a container from a custom image.
+- How to inspect running and stopped containers.
+- How to inspect container logs.
+- How to execute commands inside a running container.
+- How files are copied into an image during the build process.
+- How to stop, start, and remove containers.
+- How to troubleshoot container connectivity layer by layer.
+- Why Docker images and containers should be treated as separate resources.
+
+---
+
+### Validation
+
+| Test | Result |
+|---|---|
+| Docker Installation | SUCCESS |
+| Docker Service | RUNNING |
+| `hello-world` Test | SUCCESS |
+| Nginx Image Pull | SUCCESS |
+| Nginx Container Deployment | SUCCESS |
+| Port Mapping `8080:80` | SUCCESS |
+| Local Nginx Test | SUCCESS |
+| External Nginx Access | SUCCESS |
+| Custom HTML Creation | SUCCESS |
+| Dockerfile Creation | SUCCESS |
+| Custom Image Build | SUCCESS |
+| `cloudops-web:v1` Image | VERIFIED |
+| Custom Container Deployment | SUCCESS |
+| Port Mapping `8081:80` | SUCCESS |
+| Custom Website Browser Test | SUCCESS |
+| Container Logs | VERIFIED |
+| HTTP 200 Response | VERIFIED |
+| `docker exec` Test | SUCCESS |
+| Container Stop/Start | SUCCESS |
+| Container Removal | SUCCESS |
+| Container Cleanup | COMPLETE |
+
+---
+
+### Result
+
+Day 5 successfully demonstrated a complete basic Docker workflow:
+
+```text
+Write Application
+      |
+      v
+Create Dockerfile
+      |
+      v
+Build Docker Image
+      |
+      v
+Run Container
+      |
+      v
+Publish Port
+      |
+      v
+Configure AWS Security Group
+      |
+      v
+Access Application
+      |
+      v
+Inspect Logs
+      |
+      v
+Troubleshoot
+      |
+      v
+Manage Container Lifecycle
+```
+
+The custom web application was successfully containerized and deployed on AWS EC2 using Docker.
+
 ## 🔭 Roadmap
 
 Future labs will expand this project with:
