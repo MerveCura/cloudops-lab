@@ -2137,6 +2137,264 @@ Manage Container Lifecycle
 
 The custom web application was successfully containerized and deployed on AWS EC2 using Docker.
 
+# Day 6 – Docker Compose & Multi-Container Application
+
+## Objective
+
+The goal of Day 6 was to learn how Docker Compose can be used to define and manage multiple containers as a single application.
+
+The lab was deployed on an AWS EC2 instance and consisted of two services:
+
+- Nginx web server
+- Redis
+
+## Architecture
+
+```text
+AWS EC2
+   |
+Docker Compose
+   |
+   +-- web (Nginx)
+   |
+   +-- redis (Redis)
+         |
+docker-compose-lab_default network
+```
+
+Docker Compose automatically created a private Docker network that allowed the services to discover each other using service names.
+
+---
+
+## 1. Docker Compose Installation
+
+Docker Compose v2 was installed on the EC2 instance:
+
+```bash
+sudo apt update
+sudo apt install docker-compose-v2 -y
+```
+
+The installation was verified with:
+
+```bash
+docker compose version
+```
+
+---
+
+## 2. Creating the Compose Project
+
+A new project directory was created:
+
+```bash
+cd ~
+mkdir docker-compose-lab
+cd docker-compose-lab
+```
+
+A `compose.yaml` file was created:
+
+```yaml
+services:
+  web:
+    image: nginx:latest
+    ports:
+      - "8082:80"
+
+  redis:
+    image: redis:latest
+```
+
+The `web` service runs Nginx and maps EC2 port `8082` to port `80` inside the container.
+
+The `redis` service runs Redis without publishing its port to the EC2 host.
+
+---
+
+## 3. Starting the Multi-Container Application
+
+Both services were started using:
+
+```bash
+sudo docker compose up -d
+```
+
+Docker Compose automatically:
+
+- Pulled the required images
+- Created the containers
+- Created the project network
+- Connected both services to the same network
+- Started the services in detached mode
+
+The running services were verified with:
+
+```bash
+sudo docker compose ps
+```
+
+The application contained:
+
+```text
+docker-compose-lab-web-1
+docker-compose-lab-redis-1
+```
+
+---
+
+## 4. Docker Compose Networking and DNS
+
+Docker Compose created the following network automatically:
+
+```text
+docker-compose-lab_default
+```
+
+The `web` container was able to resolve the Redis service using its service name:
+
+```bash
+sudo docker compose exec web getent hosts redis
+```
+
+This demonstrated Docker Compose service discovery.
+
+Instead of depending on a container's changing private IP address, applications can communicate using the service name:
+
+```text
+redis:6379
+```
+
+---
+
+## 5. Testing Redis
+
+Redis was tested using:
+
+```bash
+sudo docker compose exec redis redis-cli ping
+```
+
+Result:
+
+```text
+PONG
+```
+
+A key-value pair was then stored:
+
+```bash
+sudo docker compose exec redis redis-cli SET project cloudops-lab
+```
+
+Result:
+
+```text
+OK
+```
+
+The value was retrieved using:
+
+```bash
+sudo docker compose exec redis redis-cli GET project
+```
+
+Result:
+
+```text
+"cloudops-lab"
+```
+
+This verified that the Redis service was running and able to store and retrieve data.
+
+---
+
+## 6. Viewing Compose Logs
+
+Logs from all services were viewed using:
+
+```bash
+sudo docker compose logs
+```
+
+Docker Compose provides a centralized way to view logs from multiple services in the same application.
+
+Individual service logs can also be viewed:
+
+```bash
+sudo docker compose logs redis
+```
+
+---
+
+## 7. Inspecting Docker Networks
+
+Available Docker networks were listed with:
+
+```bash
+sudo docker network ls
+```
+
+The Compose network was inspected using:
+
+```bash
+sudo docker network inspect docker-compose-lab_default
+```
+
+The inspection showed that both the Nginx and Redis containers were connected to the same Docker network.
+
+This demonstrated how containers in the same Compose project can communicate through an isolated application network.
+
+---
+
+## 8. Container Lifecycle with Docker Compose
+
+All Compose services were stopped using:
+
+```bash
+sudo docker compose stop
+```
+
+They were restarted using:
+
+```bash
+sudo docker compose start
+```
+
+The service status was checked using:
+
+```bash
+sudo docker compose ps
+```
+
+Unlike `stop`, the following command removes the project's containers and Compose network:
+
+```bash
+sudo docker compose down
+```
+
+The Docker images and `compose.yaml` file remain available.
+
+---
+
+## Key Learnings
+
+- Docker Compose manages multiple containers as one application.
+- Services are defined declaratively in `compose.yaml`.
+- `docker compose up -d` creates and starts the application.
+- Compose automatically creates a private network for the project.
+- Services can discover each other using service names through Docker DNS.
+- Internal services do not need to expose their ports publicly.
+- `docker compose logs` provides centralized service logs.
+- `docker compose stop` stops containers without removing them.
+- `docker compose start` restarts stopped containers.
+- `docker compose down` removes the Compose containers and project network.
+- Redis can be used as an in-memory key-value data store.
+
+## Result
+
+Successfully deployed and managed a multi-container Nginx and Redis environment on AWS EC2 using Docker Compose.
+
 ## 🔭 Roadmap
 
 Future labs will expand this project with:
